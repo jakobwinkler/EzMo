@@ -15,6 +15,10 @@ local DB_DEFAULTS = {
 local EzMo = LibStub("AceAddon-3.0"):NewAddon(ADDON, "AceConsole-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 
+--
+-- Helpers
+--
+
 function EzMo:GetSpellInfoById(spellId)
     local name, _, icon, _, _, _, id = GetSpellInfo(spellId)
     return {name = name, icon = icon, id = id}
@@ -40,16 +44,113 @@ function EzMo:GetAvailableSpells()
     return spells
 end
 
-function EzMo:OnInitialize()
-    self.version = GetAddOnMetadata(ADDON, "Version")
-    self:Print("Loaded version " .. self.version .. ". Thanks for using EzMo :3")
-    self:RegisterChatCommand("ezmo", "CreateMainFrame")
+function EzMo:CreateSpellEntry(spell)
+    local entry = AceGUI:Create("InteractiveLabel")
+    entry:SetText(spell.name)
+    entry:SetImageSize(24, 24)
+    entry:SetImage(spell.icon)
+    entry:SetFullWidth(true)
+    entry:SetHighlight()
+    return entry
+end
 
-    -- load saved variables
-    self.db = LibStub("AceDB-3.0"):New("EzMoDB", DB_DEFAULTS)
+--
+-- UI
+--
+function EzMo:CreateMacroHeader()
+    local availableLabel = AceGUI:Create("Label")
+    availableLabel:SetText("Available spells:")
+    availableLabel:SetRelativeWidth(0.5)
+    availableLabel:SetFontObject(Game15Font)
 
-    -- for debugging:
-    self:CreateMainFrame()
+    local managedLabel = AceGUI:Create("Label")
+    managedLabel:SetText("Managed spells:")
+    managedLabel:SetRelativeWidth(0.5)
+    managedLabel:SetFontObject(Game15Font)
+
+    return availableLabel, managedLabel
+end
+
+function EzMo:CreateAvailableSpellContainer()
+    local availableContainer = AceGUI:Create("InlineGroup")
+    availableContainer:SetHeight(260)
+    availableContainer:SetAutoAdjustHeight(false)
+    availableContainer:SetLayout("Fill")
+
+    local availableScroll = AceGUI:Create("ScrollFrame")
+    availableScroll:SetFullWidth(true)
+    availableScroll:SetLayout("List")
+
+    local available = self:GetAvailableSpells()
+    for name, spell in pairs(available) do
+        -- this is not fast, but for 20-ish spells it's good enough
+        if not tContains(self.db.char.managedSpells, spell.id) then
+            local entry = self:CreateSpellEntry(spell)
+            entry:SetCallback(
+                "OnClick",
+                function(b)
+                    tinsert(self.db.char.managedSpells, spell.id)
+                    self.tabGroup:SelectTab(MACRO_TAB)
+                end
+            )
+            availableScroll:AddChild(entry)
+        end
+    end
+
+    availableContainer:AddChild(availableScroll)
+    return availableContainer
+end
+
+function EzMo:CreateManagedSpellContainer()
+    local managedContainer = AceGUI:Create("InlineGroup")
+    managedContainer:SetFullHeight(true)
+    managedContainer:SetLayout("Fill")
+
+    local managedScroll = AceGUI:Create("ScrollFrame")
+    managedScroll:SetFullWidth(true)
+    managedScroll:SetLayout("List")
+
+    for idx, id in pairs(self.db.char.managedSpells) do
+        local spell = self:GetSpellInfoById(id)
+        local entry = self:CreateSpellEntry(spell)
+        -- this is not fast, but for 20-ish spells it's good enough
+        entry:SetCallback(
+            "OnClick",
+            function(b)
+                tremove(self.db.char.managedSpells, idx)
+                self.tabGroup:SelectTab(MACRO_TAB)
+            end
+        )
+        managedScroll:AddChild(entry)
+    end
+
+    managedContainer:AddChild(managedScroll)
+    return managedContainer
+end
+
+function EzMo:ShowMacroTab(container)
+    -- base container
+    local tableContainer = AceGUI:Create("SimpleGroup")
+    tableContainer:SetFullWidth(true)
+    tableContainer:SetFullHeight(true)
+    tableContainer:SetUserData("table", {columns = {5, 5}})
+    tableContainer:SetLayout("Table")
+
+    -- headers
+    tableContainer:AddChildren(self:CreateMacroHeader())
+
+    -- spell lists
+    tableContainer:AddChild(self:CreateAvailableSpellContainer())
+    tableContainer:AddChild(self:CreateManagedSpellContainer())
+
+    -- apply changes
+    local applyButton = AceGUI:Create("Button")
+    applyButton:SetText("Update Macros")
+    applyButton:SetRelativeWidth(0.2)
+    tableContainer:AddChild(applyButton)
+
+    -- TODO: implement onclick logic
+    container:AddChild(tableContainer)
 end
 
 function EzMo:ShowConfigTab(container)
@@ -97,90 +198,6 @@ function EzMo:ShowConfigTab(container)
     container:AddChild(resetGroup)
 end
 
-function EzMo:CreateSpellEntry(spell)
-    local entry = AceGUI:Create("InteractiveLabel")
-    entry:SetText(spell.name)
-    entry:SetImageSize(24, 24)
-    entry:SetImage(spell.icon)
-    entry:SetFullWidth(true)
-    entry:SetHighlight()
-    return entry
-end
-
-function EzMo:CreateMacroHeader()
-    local availableLabel = AceGUI:Create("Label")
-    availableLabel:SetText("Available spells:")
-    availableLabel:SetRelativeWidth(0.5)
-    availableLabel:SetFontObject(Game15Font)
-
-    local managedLabel = AceGUI:Create("Label")
-    managedLabel:SetText("Managed spells:")
-    managedLabel:SetRelativeWidth(0.5)
-    managedLabel:SetFontObject(Game15Font)
-
-    return availableLabel, managedLabel
-end
-
-function EzMo:CreateAvailableSpellContainer()
-    local availableContainer = AceGUI:Create("InlineGroup")
-    availableContainer:SetFullHeight(true)
-    availableContainer:SetLayout("Fill")
-
-    local availableScroll = AceGUI:Create("ScrollFrame")
-    availableScroll:SetFullWidth(true)
-    availableScroll:SetLayout("List")
-
-    local available = self:GetAvailableSpells()
-    for name, spell in pairs(available) do
-        local entry = self:CreateSpellEntry(spell)
-        entry:SetCallback("OnClick", function (b) self:Print("Clicked " .. spell.name);  end)
-        availableScroll:AddChild(entry)
-    end
-
-    availableContainer:AddChild(availableScroll)
-    return availableContainer
-end
-
-function EzMo:CreateManagedSpellContainer()
-    local managedContainer = AceGUI:Create("InlineGroup")
-    managedContainer:SetFullHeight(true)
-    managedContainer:SetLayout("Fill")
-
-    local managedScroll = AceGUI:Create("ScrollFrame")
-    managedScroll:SetFullWidth(true)
-    managedScroll:SetLayout("List")
-
-    -- TODO: populate list with actual data
-
-    managedContainer:AddChild(managedScroll)
-    return managedContainer
-end
-
-function EzMo:ShowMacroTab(container)
-    -- base container
-    local tableContainer = AceGUI:Create("SimpleGroup")
-    tableContainer:SetFullWidth(true)
-    tableContainer:SetFullHeight(true)
-    tableContainer:SetUserData("table", { columns = { 5, 5 } });
-    tableContainer:SetLayout("Table")
-
-    -- headers 
-    tableContainer:AddChildren(self:CreateMacroHeader())
-
-    -- spell lists
-    tableContainer:AddChild(self:CreateAvailableSpellContainer())
-    tableContainer:AddChild(self:CreateManagedSpellContainer())
-
-    -- apply changes
-    local applyButton = AceGUI:Create("Button")
-    applyButton:SetText("Update Macros")
-    applyButton:SetRelativeWidth(0.2)
-    tableContainer:AddChild(applyButton)
-
-    -- TODO: implement onclick logic
-    container:AddChild(tableContainer)
-end
-
 function EzMo:OnTabGroupSelected(container, event, tab)
     container:ReleaseChildren()
     if tab == MACRO_TAB then
@@ -219,4 +236,16 @@ function EzMo:CreateMainFrame()
     tabGroup:SelectTab(MACRO_TAB)
     self.tabGroup = tabGroup
     mainFrame:AddChild(tabGroup)
+end
+
+function EzMo:OnInitialize()
+    self.version = GetAddOnMetadata(ADDON, "Version")
+    self:Print("Loaded version " .. self.version .. ". Thanks for using EzMo :3")
+    self:RegisterChatCommand("ezmo", "CreateMainFrame")
+
+    -- load saved variables
+    self.db = LibStub("AceDB-3.0"):New("EzMoDB", DB_DEFAULTS)
+
+    -- for debugging:
+    self:CreateMainFrame()
 end
