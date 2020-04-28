@@ -50,8 +50,14 @@ function EzMo:CreateSpellEntry(spell)
     entry:SetImageSize(24, 24)
     entry:SetImage(spell.icon)
     entry:SetFullWidth(true)
-    entry:SetHighlight()
+
+    -- this, technically, is not nice as it bypasses the AceGUI API
+    entry.highlight:SetColorTexture(0.8, 0.8, 0.8, 0.5)
+
     return entry
+end
+
+function EzMo:UpdateMacros()
 end
 
 --
@@ -147,10 +153,11 @@ function EzMo:ShowMacroTab(container)
     local applyButton = AceGUI:Create("Button")
     applyButton:SetText("Update Macros")
     applyButton:SetRelativeWidth(0.2)
+    applyButton:SetCallback("OnClick", function() self:UpdateMacros() end)
     tableContainer:AddChild(applyButton)
-
-    -- TODO: implement onclick logic
     container:AddChild(tableContainer)
+
+    self:Print(applyButton:GetHighlightTexture())
 end
 
 function EzMo:ShowConfigTab(container)
@@ -161,12 +168,7 @@ function EzMo:ShowConfigTab(container)
     macroEditBox:SetRelativeWidth(0.8)
     macroEditBox:SetMaxLetters(200) -- max macro length is 255, give us some slack for text replacement
     macroEditBox:SetNumLines(4)
-    macroEditBox:SetCallback(
-        "OnEnterPressed",
-        function(f)
-            self.db.char.macroText = f:GetText()
-        end
-    )
+    macroEditBox:SetCallback("OnEnterPressed", function(f) self.db.char.macroText = f:GetText() end)
     container:AddChild(macroEditBox)
 
     -- allow resetting config (mostly for debug)
