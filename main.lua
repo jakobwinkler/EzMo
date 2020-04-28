@@ -164,7 +164,7 @@ end
 
 function EzMo:CreateAvailableSpellContainer()
     local availableContainer = AceGUI:Create("InlineGroup")
-    availableContainer:SetHeight(260)
+    availableContainer:SetHeight(280)
     availableContainer:SetAutoAdjustHeight(false)
     availableContainer:SetLayout("Fill")
 
@@ -234,16 +234,6 @@ function EzMo:ShowMacroTab(container)
     tableContainer:AddChild(self:CreateManagedSpellContainer())
 
     -- apply changes
-    local applyButton = AceGUI:Create("Button")
-    applyButton:SetText("Update Macros")
-    applyButton:SetRelativeWidth(0.2)
-    applyButton:SetCallback(
-        "OnClick",
-        function()
-            self:UpdateMacros()
-        end
-    )
-    tableContainer:AddChild(applyButton)
     container:AddChild(tableContainer)
 end
 
