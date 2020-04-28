@@ -1,8 +1,20 @@
 -- constants
 local ADDON = "EzMo"
+
+-- UI tab identifiers
 local MACRO_TAB = "macros"
 local CONFIG_TAB = "config"
-local SPELL_PATTERN = "%spell%"
+
+-- macro constants
+local ACTIONBAR_MAX = 120
+local MACRO_ID_MIN = 1 -- macros are 1-indexed
+local MACRO_ID_CHAR = 121 -- character specific macros start at 121
+local MACRO_ID_MAX = 138 -- last valid macro is 138
+local MACRO_NUM_LOCAL = MACRO_ID_MAX - MACRO_ID_CHAR
+local MACRO_NUM_GLOBAL =  MACRO_ID_CHAR - MACRO_ID_MIN
+local MACRO_PREFIX = "[Ez]"
+
+local SPELL_PATTERN = "{spell}" -- pattern to replace with spell name in macros
 local DEFAULT_MACRO = "#showtooltip\n/use [@mouseover,help,nodead][help,nodead][@player] " .. SPELL_PATTERN
 local DB_DEFAULTS = {
     char = {
@@ -22,6 +34,10 @@ local AceGUI = LibStub("AceGUI-3.0")
 function EzMo:GetSpellInfoById(spellId)
     local name, _, icon, _, _, _, id = GetSpellInfo(spellId)
     return {name = name, icon = icon, id = id}
+end
+
+function EzMo:GetMacroName(spell)
+    return MACRO_PREFIX .. spell.name
 end
 
 function EzMo:GetAvailableSpells()
@@ -57,7 +73,76 @@ function EzMo:CreateSpellEntry(spell)
     return entry
 end
 
-function EzMo:UpdateMacros()
+function EzMo:DoesMacroExist(name)
+    local name, _, _, _ = GetMacroInfo(name)
+
+    if name then
+        return true
+    else
+        return false
+    end
+end
+
+function EzMo:GetMacroBody(spell)
+    return gsub(self.db.char.macroText, SPELL_PATTERN, spell.name)
+end
+
+function EzMo:ManageSpell(spell)
+    -- persist spell as managed
+    tinsert(self.db.char.managedSpells, spell.id)
+
+    local macroName = self:GetMacroName(spell)
+    local macroIndex = GetMacroIndexByName(macroName)
+
+    -- create macro if not exists
+    if macroIndex == 0 then
+        local globalMacros, localMacros = GetNumMacros()
+        local macroBody = self:GetMacroBody(spell)
+        if localMacros < MACRO_NUM_LOCAL then
+            macroIndex = CreateMacro(macroName, spell.icon, macroBody, 1)
+        elseif globalMacros < MACRO_NUM_GLOBAL then
+            self:Print("Per-character macro limit reached. Creating global macro.")
+            macroIndex = CreateMacro(macroName, spell.icon, macroBody, nil)
+        else
+            self:Print("Global macro limit reached. Could not create any more macros.")
+        end
+    end
+
+    -- replace spell on hotkeys with macro
+    for key = 1, ACTIONBAR_MAX do
+        local atype, id, subtype, _ = GetActionInfo(key)
+        if atype == "spell" and subtype == "spell" then
+            if id == spell.id then
+                PickupMacro(macroIndex)
+                PlaceAction(key)
+                ClearCursor()
+            end
+        end
+    end
+end
+
+function EzMo:UnmanageSpell(idx, spell)
+    -- remove spell from persistent db
+    tremove(self.db.char.managedSpells, idx)
+
+    -- replace macro on hotkeys with spell
+    local macroName = self:GetMacroName(spell)
+    local macroIndex = GetMacroIndexByName(macroName)
+
+    for key = 1, ACTIONBAR_MAX do
+        local atype, id, _, _ = GetActionInfo(key)
+        if atype == "macro" then
+            local name, _, _, _ = GetMacroInfo(id)
+            if name == macroName then
+                PickupSpell(spell.id)
+                PlaceAction(key)
+                ClearCursor()
+            end
+        end
+    end
+
+    -- delete macro if exists
+    DeleteMacro(macroName)
 end
 
 --
@@ -94,8 +179,8 @@ function EzMo:CreateAvailableSpellContainer()
             local entry = self:CreateSpellEntry(spell)
             entry:SetCallback(
                 "OnClick",
-                function(b)
-                    tinsert(self.db.char.managedSpells, spell.id)
+                function()
+                    self:ManageSpell(spell)
                     self.tabGroup:SelectTab(MACRO_TAB)
                 end
             )
@@ -119,11 +204,10 @@ function EzMo:CreateManagedSpellContainer()
     for idx, id in pairs(self.db.char.managedSpells) do
         local spell = self:GetSpellInfoById(id)
         local entry = self:CreateSpellEntry(spell)
-        -- this is not fast, but for 20-ish spells it's good enough
         entry:SetCallback(
             "OnClick",
-            function(b)
-                tremove(self.db.char.managedSpells, idx)
+            function()
+                self:UnmanageSpell(idx, spell)
                 self.tabGroup:SelectTab(MACRO_TAB)
             end
         )
@@ -153,11 +237,14 @@ function EzMo:ShowMacroTab(container)
     local applyButton = AceGUI:Create("Button")
     applyButton:SetText("Update Macros")
     applyButton:SetRelativeWidth(0.2)
-    applyButton:SetCallback("OnClick", function() self:UpdateMacros() end)
+    applyButton:SetCallback(
+        "OnClick",
+        function()
+            self:UpdateMacros()
+        end
+    )
     tableContainer:AddChild(applyButton)
     container:AddChild(tableContainer)
-
-    self:Print(applyButton:GetHighlightTexture())
 end
 
 function EzMo:ShowConfigTab(container)
@@ -168,7 +255,12 @@ function EzMo:ShowConfigTab(container)
     macroEditBox:SetRelativeWidth(0.8)
     macroEditBox:SetMaxLetters(200) -- max macro length is 255, give us some slack for text replacement
     macroEditBox:SetNumLines(4)
-    macroEditBox:SetCallback("OnEnterPressed", function(f) self.db.char.macroText = f:GetText() end)
+    macroEditBox:SetCallback(
+        "OnEnterPressed",
+        function(f)
+            self.db.char.macroText = f:GetText()
+        end
+    )
     container:AddChild(macroEditBox)
 
     -- allow resetting config (mostly for debug)
@@ -248,6 +340,6 @@ function EzMo:OnInitialize()
     -- load saved variables
     self.db = LibStub("AceDB-3.0"):New("EzMoDB", DB_DEFAULTS)
 
-    -- for debugging:
-    self:CreateMainFrame()
+    -- for faster debugging:
+    -- self:CreateMainFrame()
 end
