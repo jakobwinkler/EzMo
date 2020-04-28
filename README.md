@@ -14,6 +14,8 @@ to the macro.
 Click spells in the list of managed spells to remove them. The macro will be deleted and any macros on your
 hotbars will be replaced with the basic spell.
 
+![Demonstration screenshot](demo.png)
+
 ## Configuration
 
 The macro text can be configured using the configuration tab. The placeholder `{spell}` contained in the macro 
