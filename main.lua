@@ -151,12 +151,10 @@ end
 function EzMo:CreateMacroHeader()
     local availableLabel = AceGUI:Create("Label")
     availableLabel:SetText("Available spells:")
-    availableLabel:SetRelativeWidth(0.5)
     availableLabel:SetFontObject(Game15Font)
 
     local managedLabel = AceGUI:Create("Label")
     managedLabel:SetText("Managed spells:")
-    managedLabel:SetRelativeWidth(0.5)
     managedLabel:SetFontObject(Game15Font)
 
     return availableLabel, managedLabel
@@ -164,7 +162,7 @@ end
 
 function EzMo:CreateAvailableSpellContainer()
     local availableContainer = AceGUI:Create("InlineGroup")
-    availableContainer:SetHeight(280)
+    availableContainer:SetHeight(260)
     availableContainer:SetAutoAdjustHeight(false)
     availableContainer:SetLayout("Fill")
 
@@ -223,8 +221,13 @@ function EzMo:ShowMacroTab(container)
     local tableContainer = AceGUI:Create("SimpleGroup")
     tableContainer:SetFullWidth(true)
     tableContainer:SetFullHeight(true)
-    tableContainer:SetUserData("table", {columns = {5, 5}})
+    tableContainer:SetUserData("table", {columns = {5, 5}, spaceV = 10})
     tableContainer:SetLayout("Table")
+
+    -- force top spacing (this is a hack)
+    local spacing = AceGUI:Create("SimpleGroup")
+    spacing:SetUserData("cell", {colspan = 2})
+    tableContainer:AddChild(spacing)
 
     -- headers
     tableContainer:AddChildren(self:CreateMacroHeader())
