@@ -320,6 +320,11 @@ function EzMo:CreateMainFrame()
     tabGroup:SelectTab(MACRO_TAB)
     self.tabGroup = tabGroup
     mainFrame:AddChild(tabGroup)
+
+    -- register frame globally as special frame, allowing it
+    -- to be closed with the escape key
+    _G["EzMoMainFrame"] = mainFrame.frame
+    tinsert(UISpecialFrames, "EzMoMainFrame")
 end
 
 function EzMo:OnInitialize()
